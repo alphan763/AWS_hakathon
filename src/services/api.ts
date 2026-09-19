@@ -49,6 +49,7 @@ export interface RecoveryPlanResponse {
   followUp: FollowUpAppointment | null;
   warningSigns: WarningSign[];
   pages: DocumentPage[];
+  plans?: any[];
 }
 
 export interface CheckInSubmissionPayload {
@@ -76,6 +77,20 @@ export const CarePathApi = {
   async getAwsStatus(): Promise<AwsStatusResponse> {
     const res = await fetch('/api/health/aws-status');
     if (!res.ok) throw new Error('Failed to fetch AWS status');
+    return res.json();
+  },
+
+  async listDocuments(): Promise<DocumentStatusResponse[]> {
+    const res = await fetch('/api/documents');
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async activateDocument(documentId: string): Promise<any> {
+    const res = await fetch(`/api/documents/${documentId}/activate`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to activate document');
     return res.json();
   },
 

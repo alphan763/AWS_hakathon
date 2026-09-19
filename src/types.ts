@@ -86,6 +86,7 @@ export interface PatientProfile {
     phone: string;
   };
   hospitalHelpline: string;
+  isDemo?: boolean;
 }
 
 export type PainLevel = 'better' | 'same' | 'worse';
