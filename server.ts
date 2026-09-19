@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import {
   getAwsStatus,
@@ -15,8 +16,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Multer memory storage for direct file uploads
+  const upload = multer({
+    limits: { fileSize: 50 * 1024 * 1024 },
+    storage: multer.memoryStorage(),
+  });
+
   // JSON Body parser for document uploads and check-in records
   app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // ==========================================
   // Health & Architecture Status Endpoints
@@ -31,22 +39,22 @@ async function startServer() {
       environment: isLiveAws ? 'aws' : 'local',
       timestamp: new Date().toISOString(),
       services: {
-        s3: isLocalStackUp ? 'connected' : 'demo_fallback',
-        dynamodb: isLocalStackUp ? 'connected' : 'demo_fallback',
-        sns: isLocalStackUp ? 'connected' : 'demo_fallback',
-        clinicalAI: 'fixture',
-        extraction: 'local',
+        s3: isLocalStackUp ? 'connected' : 'local_storage',
+        dynamodb: isLocalStackUp ? 'connected' : 'local_database',
+        sns: isLocalStackUp ? 'connected' : 'local_notifications',
+        clinicalAI: process.env.GEMINI_API_KEY ? 'gemini_active' : 'deterministic_nlp',
+        extraction: 'local_pdf_parse',
       },
       activeMode: isLiveAws
         ? 'LIVE_AWS_SERVICES'
         : isLocalStackUp
         ? 'LOCALSTACK_EMULATION (S3, DynamoDB, SNS)'
-        : 'LOCAL_DEMO_FALLBACK (Resilient in-memory & verified fixtures)',
+        : 'LOCAL_STANDALONE_PIPELINE (Local extraction, clinical structuring, & in-memory state)',
       localstack: {
         endpoint: getLocalStackEndpoint(),
         connected: isLocalStackUp,
       },
-      disclaimer: 'Demo patient · Fictional clinical data · Local AWS emulation',
+      disclaimer: 'Fictional clinical data · Local processing · Privacy protected',
     };
   };
 
@@ -69,22 +77,50 @@ async function startServer() {
   // Document Ingestion & Pipeline Endpoints
   // ==========================================
 
-  // 2. Upload Document & Ingest Pipeline
-  app.post('/api/documents/upload', async (req, res) => {
-    try {
-      const { filename = 'discharge_instructions.pdf', fileBase64, isDemo = false } = req.body;
-      let buffer: Buffer | undefined;
+  // List all uploaded documents
+  app.get('/api/documents', (req, res) => {
+    res.json(DocumentService.listDocuments());
+  });
 
-      if (fileBase64) {
-        // Strip data url prefix if present
-        const cleanBase64 = fileBase64.replace(/^data:[^;]+;base64,/, '');
-        buffer = Buffer.from(cleanBase64, 'base64');
+  // Activate a specific document plan
+  app.post('/api/documents/:id/activate', (req, res) => {
+    const success = DocumentService.setActiveDocument(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: 'Document plan not found' });
+    }
+    res.json({
+      success: true,
+      activeDocumentId: req.params.id,
+      recoveryPlan: DocumentService.getRecoveryPlan(req.params.id),
+    });
+  });
+
+  // 2. Upload Document & Ingest Pipeline (Supports both multipart/form-data and JSON base64)
+  app.post('/api/documents/upload', upload.single('file'), async (req, res) => {
+    try {
+      let filename = 'discharge_instructions.pdf';
+      let buffer: Buffer | undefined;
+      let isDemo = false;
+
+      if (req.file) {
+        filename = req.file.originalname || filename;
+        buffer = req.file.buffer;
+        isDemo = req.body?.isDemo === 'true' || req.body?.isDemo === true;
+      } else {
+        const body = req.body || {};
+        filename = body.filename || filename;
+        isDemo = Boolean(body.isDemo);
+
+        if (body.fileBase64) {
+          const cleanBase64 = body.fileBase64.replace(/^data:[^;]+;base64,/, '');
+          buffer = Buffer.from(cleanBase64, 'base64');
+        }
       }
 
       const result = await DocumentService.runEndToEndPipeline(
         filename,
         buffer,
-        Boolean(isDemo)
+        isDemo
       );
 
       res.status(200).json({
@@ -120,7 +156,7 @@ async function startServer() {
   app.get('/api/documents/:id/pages', (req, res) => {
     const pagesOutput = DocumentService.getDocumentPages(req.params.id);
     if (!pagesOutput) {
-      const activePlan = DocumentService.getRecoveryPlan('active');
+      const activePlan = DocumentService.getRecoveryPlan(req.params.id) || DocumentService.getRecoveryPlan('active');
       if (activePlan?.pages) {
         return res.json({
           document_id: req.params.id,
@@ -188,7 +224,8 @@ async function startServer() {
 
   // 7. Check-In History
   app.get('/api/check-in/history', (req, res) => {
-    res.json(CheckInService.getHistory());
+    const docId = (req.query.documentId as string) || undefined;
+    res.json(CheckInService.getHistory(docId));
   });
 
   // 8. Caregiver Alert Logs & Simulator History

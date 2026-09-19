@@ -29,11 +29,14 @@ import {
   BedrockWarningSign,
   BedrockFollowUp,
 } from './documentModel';
+import { LocalExtractionService } from './extraction/localExtractionService';
+import { getClinicalAIService } from './ai/clinicalAIService';
 
 // In-memory document & recovery store (for sub-second lookups, dev mode, and demo mode)
 const inMemoryDocuments = new Map<string, DocumentRecord>();
 const inMemoryPages = new Map<string, TextractNormalizedOutput>();
 const inMemoryPlans = new Map<string, any>();
+let activeDocumentId = 'doc-initial-demo';
 
 // Standard 5-page normalized text for fictional demo patient: Mrs. Anita Sharma
 export const FICTIONAL_DISCHARGE_PAGES: TextractPage[] = [
@@ -235,16 +238,27 @@ export class DocumentService {
             page_number: pNum,
             text: lines.join('\n'),
           }));
-        } else {
-          pages = FICTIONAL_DISCHARGE_PAGES;
         }
       } catch (err) {
-        console.warn('[AWS Textract] Falling back to normalized standard pages:', (err as Error).message);
-        pages = FICTIONAL_DISCHARGE_PAGES;
+        console.warn('[AWS Textract] Cloud Textract unavailable, using local parser:', (err as Error).message);
       }
-    } else {
-      // Deterministic normalized representation with verified page numbers
-      pages = FICTIONAL_DISCHARGE_PAGES;
+    }
+
+    // If pages not extracted via AWS, use LocalExtractionService for dynamic multi-page PDF extraction
+    if (pages.length === 0) {
+      const localResult = await LocalExtractionService.extract(
+        documentId,
+        record?.filename || 'discharge-instructions.pdf',
+        fileBuffer
+      );
+      pages = localResult.pages.map((p) => ({
+        page_number: p.pageNumber,
+        text: p.text,
+      }));
+    }
+
+    if (record) {
+      record.page_count = pages.length;
     }
 
     const output: TextractNormalizedOutput = {
@@ -380,11 +394,13 @@ Strict JSON Schema to return:
           throw new Error('No valid JSON returned from Bedrock model');
         }
       } catch (err) {
-        console.warn('[AWS Bedrock] Falling back to verified structured output:', (err as Error).message);
-        parsedResult = DocumentService.getStandardBedrockOutput();
+        console.warn('[AWS Bedrock] Bedrock unavailable, using Local Clinical AI Provider:', (err as Error).message);
+        const clinicalAi = getClinicalAIService();
+        parsedResult = await clinicalAi.structureDischargeDocument(textractOutput);
       }
     } else {
-      parsedResult = DocumentService.getStandardBedrockOutput();
+      const clinicalAi = getClinicalAIService();
+      parsedResult = await clinicalAi.structureDischargeDocument(textractOutput);
     }
 
     return parsedResult;
@@ -494,23 +510,23 @@ Strict JSON Schema to return:
       documentId,
       patient: {
         id: 'pt-' + documentId,
-        name: validatedPlan.patient.name || 'Mrs. Anita Sharma',
+        name: validatedPlan.patient.name || 'Patient Record',
         age: validatedPlan.patient.age || 58,
-        diagnosis: 'Symptomatic Cholelithiasis (Gallstones)',
-        procedure: validatedPlan.patient.procedure || 'Elective Laparoscopic Cholecystectomy',
-        dischargeDate: validatedPlan.patient.discharge_date || 'September 17, 2026',
+        diagnosis: validatedPlan.patient.diagnosis || 'Post-Operative Recovery',
+        procedure: validatedPlan.patient.procedure || 'Clinical Procedure',
+        dischargeDate: validatedPlan.patient.discharge_date || 'Recent Discharge',
         currentDay: 2,
         totalDays: validatedPlan.recovery_period_days || 14,
-        hospitalName: validatedPlan.patient.hospital_name || 'Apex Memorial Healthcare',
-        attendingPhysician: validatedPlan.patient.attending_physician || 'Dr. Arvind Rao, MS, FACS',
-        caregiverName: 'Pooja Sharma (Daughter)',
-        emergencyContact: {
-          name: 'Rajesh Sharma',
-          relationship: 'Husband',
+        hospitalName: validatedPlan.patient.hospital_name || 'Regional Healthcare System',
+        attendingPhysician: validatedPlan.patient.attending_physician || 'Attending Physician',
+        caregiverName: validatedPlan.patient.caregiver || 'Primary Caregiver',
+        emergencyContact: validatedPlan.patient.emergency_contact || {
+          name: 'Emergency Contact',
+          relationship: 'Family',
           phone: '+1 (800) 555-0199',
         },
-        hospitalHelpline: '+1 (800) 555-0144 (Ext 4)',
-        isDemo: record?.is_demo ?? true,
+        hospitalHelpline: validatedPlan.patient.hospital_helpline || '+1 (800) 555-0144 (Ext 4)',
+        isDemo: record?.is_demo ?? false,
       },
       medications: validatedPlan.medications.map((m, idx) => ({
         id: `med-dyn-${idx + 1}`,
@@ -581,25 +597,89 @@ Strict JSON Schema to return:
           originalText: ws.original_extracted_text || ws.documented_action,
         },
       })),
-      pages: textractOutput.pages.map((p) => ({
-        pageNumber: p.page_number,
-        title:
-          p.page_number === 1
-            ? 'Hospital Header & Patient Identification'
-            : p.page_number === 2
-            ? 'Post-Operative Hospital Course & Vitals'
-            : p.page_number === 3
-            ? 'Discharge Medications & Administration Guidelines'
-            : p.page_number === 4
-            ? 'Activity, Diet & Follow-up Instructions'
-            : 'Critical Warning Signs & Emergency Protocol',
-        content: p.text,
-        highlights: [],
-      })),
+      pages: textractOutput.pages.map((p) => {
+        let title = `Discharge Summary — Page ${p.page_number}`;
+        const lines = p.text.split('\n').map((l) => l.trim()).filter((l) => l.length > 2);
+        for (const line of lines.slice(0, 4)) {
+          if (/^(?:SECTION\s+\d+|DEPARTMENT|PATIENT\s+DISCHARGE|PRIMARY\s+CLINICAL|HOSPITAL\s+COURSE|DISCHARGE\s+MEDICATIONS|DIETARY|PHYSICAL\s+ACTIVITY|OUTPATIENT|EMERGENCY\s+RED\s+FLAGS)/i.test(line)) {
+            title = line.slice(0, 60);
+            break;
+          }
+        }
+        return {
+          pageNumber: p.page_number,
+          title,
+          content: p.text,
+          highlights: [],
+        };
+      }),
+      plans: Array.from({ length: validatedPlan.recovery_period_days || 14 }, (_, i) => {
+        const dayNumber = i + 1;
+        const isToday = dayNumber === 2;
+        const isPast = dayNumber < 2;
+
+        let milestoneTitle: string | undefined;
+        if (dayNumber === 1) milestoneTitle = 'Hospital Discharge & Home Transition';
+        else if (dayNumber === 2) milestoneTitle = 'First 48-Hour Wound Rest & Gentle Ambulation';
+        else if (dayNumber === 3) milestoneTitle = 'Transition to Regular Soft Diet';
+        else if (dayNumber === 5) milestoneTitle = 'Antibiotic Regimen Completion Review';
+        else if (dayNumber === 7) milestoneTitle = 'Wound Dressing Assessment & Mobility Check';
+        else if (dayNumber === (validatedPlan.followups[0]?.day_number || 10)) {
+          milestoneTitle = validatedPlan.followups[0]?.title || 'Outpatient Clinical Follow-up';
+        } else if (dayNumber === 14) milestoneTitle = 'Completion of Acute Post-Op Protocol';
+
+        const dayMedications = validatedPlan.medications.map((m, idx) => ({
+          id: `med-day${dayNumber}-${idx + 1}`,
+          name: m.name,
+          dose: m.dose,
+          frequency: m.frequency,
+          timing: m.timing || (idx === 0 ? '8:00 AM' : idx === 1 ? '1:30 PM' : '8:00 PM'),
+          instructions: m.instructions,
+          completed: isPast || (isToday && idx === 0),
+          pillColor: idx === 0 || idx === 2 ? '#3B82F6' : idx === 1 ? '#F97316' : '#10B981',
+          pillShape: (idx === 0 || idx === 2 ? 'capsule' : idx === 1 ? 'oval' : 'round') as any,
+          evidence: {
+            documentId,
+            documentName: record?.filename || 'Hospital Discharge Summary & Post-Op Plan',
+            sourcePage: m.source_page,
+            section: m.source_section || 'Section 3: Discharge Medications',
+            originalText: m.original_extracted_text || m.name,
+          },
+        }));
+
+        const dayActivities = validatedPlan.instructions.map((inst, idx) => ({
+          id: `act-day${dayNumber}-${idx + 1}`,
+          title: inst.title,
+          timing: inst.timing || '11:00 AM',
+          duration: inst.duration,
+          instructions: inst.instructions,
+          completed: isPast,
+          category: inst.category,
+          evidence: {
+            documentId,
+            documentName: record?.filename || 'Hospital Discharge Summary & Post-Op Plan',
+            sourcePage: inst.source_page,
+            section: inst.source_section || 'Section 5: Physical Activity & Recovery Guidelines',
+            originalText: inst.original_extracted_text || inst.instructions,
+          },
+        }));
+
+        return {
+          dayNumber,
+          dateLabel: isToday ? 'Today' : isPast ? 'Yesterday' : `Day ${dayNumber}`,
+          isToday,
+          isPast,
+          milestoneTitle,
+          medications: dayMedications,
+          activities: dayActivities,
+          notes: isToday ? 'Focus on resting, taking medications with meals, and light ambulation.' : undefined,
+        };
+      }),
     };
 
     inMemoryPlans.set(documentId, fullRecoveryPayload);
     inMemoryPlans.set('active', fullRecoveryPayload);
+    activeDocumentId = documentId;
 
     // Save to real DynamoDB table if configured
     if (isAwsCredentialsConfigured() && process.env.DYNAMODB_TABLE_NAME) {
@@ -672,8 +752,24 @@ Strict JSON Schema to return:
     return inMemoryDocuments.get(documentId);
   }
 
-  static getRecoveryPlan(documentId: string): any {
-    return inMemoryPlans.get(documentId) || inMemoryPlans.get('active');
+  static getRecoveryPlan(documentId?: string): any {
+    if (documentId && inMemoryPlans.has(documentId)) {
+      return inMemoryPlans.get(documentId);
+    }
+    return inMemoryPlans.get('active') || inMemoryPlans.get(activeDocumentId) || inMemoryPlans.values().next().value;
+  }
+
+  static setActiveDocument(documentId: string): boolean {
+    if (inMemoryPlans.has(documentId)) {
+      inMemoryPlans.set('active', inMemoryPlans.get(documentId));
+      activeDocumentId = documentId;
+      return true;
+    }
+    return false;
+  }
+
+  static listDocuments(): DocumentRecord[] {
+    return Array.from(inMemoryDocuments.values());
   }
 
   static getDocumentPages(documentId: string): TextractNormalizedOutput | undefined {

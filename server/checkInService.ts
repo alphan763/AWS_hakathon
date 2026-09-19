@@ -30,18 +30,7 @@ export interface CheckInRecordResponse {
   };
 }
 
-const inMemoryCheckIns: CheckInRecordResponse[] = [
-  {
-    id: 'checkin-init-1',
-    timestamp: 'Yesterday, 8:30 PM',
-    dayNumber: 1,
-    pain: 'same',
-    fever: 'no',
-    breathing: 'normal',
-    notes: 'Discharged from hospital, resting well.',
-    warningMatched: false,
-  },
-];
+const inMemoryCheckIns = new Map<string, CheckInRecordResponse[]>();
 
 export class CheckInService {
   /**
@@ -99,7 +88,7 @@ export class CheckInService {
   static async sendSnsAlert(
     submission: CheckInSubmission,
     matchedWarning: any,
-    patientName = 'Mrs. Anita Sharma',
+    patientName = 'Patient',
     caregiverPhone = '+1 (800) 555-0199'
   ): Promise<{ published: boolean; messageId?: string; topicArn?: string; detail: string; isRealSms: false }> {
     const alertResult = await NotificationService.publishCaregiverAlert({
@@ -130,6 +119,7 @@ export class CheckInService {
     const activePlan = DocumentService.getRecoveryPlan(
       submission.documentId || 'active'
     );
+    const targetDocId = activePlan?.documentId || submission.documentId || 'active';
     const warningSigns = activePlan?.warningSigns || [];
     const matchedWarning = this.matchWarningSign(submission, warningSigns);
 
@@ -141,8 +131,11 @@ export class CheckInService {
 
     let snsResult;
     if (matchedWarning) {
-      const patientName = activePlan?.patient?.name || 'Mrs. Anita Sharma';
-      const caregiverPhone = activePlan?.patient?.caregiver?.phone || '+1 (800) 555-0199';
+      const patientName = activePlan?.patient?.name || 'Patient';
+      const caregiverPhone =
+        activePlan?.patient?.caregiver?.phone ||
+        activePlan?.patient?.emergencyContact?.phone ||
+        '+1 (800) 555-0199';
       snsResult = await this.sendSnsAlert(submission, matchedWarning, patientName, caregiverPhone);
     }
 
@@ -159,7 +152,10 @@ export class CheckInService {
       snsNotification: snsResult,
     };
 
-    inMemoryCheckIns.unshift(checkInRecord);
+    if (!inMemoryCheckIns.has(targetDocId)) {
+      inMemoryCheckIns.set(targetDocId, this.getHistory(targetDocId));
+    }
+    inMemoryCheckIns.get(targetDocId)!.unshift(checkInRecord);
 
     // Persist check-in using StorageService (LocalStack DynamoDB or local memory fallback)
     await StorageService.saveCheckIn(checkInRecord);
@@ -167,7 +163,23 @@ export class CheckInService {
     return checkInRecord;
   }
 
-  static getHistory(): CheckInRecordResponse[] {
-    return inMemoryCheckIns;
+  static getHistory(documentId?: string): CheckInRecordResponse[] {
+    const activePlan = DocumentService.getRecoveryPlan(documentId);
+    const targetDocId = activePlan?.documentId || documentId || 'active';
+    const list = inMemoryCheckIns.get(targetDocId);
+    if (list && list.length > 0) return list;
+
+    const initialRecord: CheckInRecordResponse = {
+      id: `checkin-init-${targetDocId}`,
+      timestamp: 'Day 1 Post-Op, 8:30 PM',
+      dayNumber: 1,
+      pain: 'same',
+      fever: 'no',
+      breathing: 'normal',
+      notes: 'Discharged from hospital, resting comfortably.',
+      warningMatched: false,
+    };
+    inMemoryCheckIns.set(targetDocId, [initialRecord]);
+    return inMemoryCheckIns.get(targetDocId)!;
   }
 }
