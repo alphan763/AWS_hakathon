@@ -1,4 +1,5 @@
 import { TextractNormalizedOutput, TextractPage } from '../documentModel';
+import { PDFParse } from 'pdf-parse';
 
 export interface LocalExtractionBlock {
   id: string;
@@ -132,32 +133,104 @@ export class LocalExtractionService {
   ): Promise<LocalTextractCompatibleOutput> {
     console.log(`[LocalExtractionService] Processing document '${filename}' (Local Textract-compatible engine)`);
 
-    // In local development, if custom ASCII/UTF-8 text is embedded in buffer, parse lines
-    let pages: TextractPage[] = DEMO_SURGICAL_PAGES;
+    // In local development, parse arbitrary PDFs or text files, falling back to demo pages ONLY when explicitly empty
+    let pages: TextractPage[] = [];
 
     if (fileBuffer && fileBuffer.length > 0) {
-      try {
-        const rawString = fileBuffer.toString('utf-8');
-        // If the uploaded file is a plain text or contains delimiter markers:
-        if (rawString.includes('Page ') || rawString.includes('PAGE ')) {
-          const parts = rawString.split(/(?:PAGE|Page)\s+(\d+)[:\s]/);
-          if (parts.length > 2) {
-            const parsedPages: TextractPage[] = [];
-            for (let i = 1; i < parts.length; i += 2) {
-              const pNum = parseInt(parts[i], 10);
-              const pText = (parts[i + 1] || '').trim();
-              if (pText) {
-                parsedPages.push({ page_number: pNum, text: pText });
-              }
-            }
-            if (parsedPages.length > 0) {
-              pages = parsedPages;
+      // Strategy 1: Check if binary PDF buffer
+      const isPdfHeader = fileBuffer.slice(0, 5).toString('ascii').startsWith('%PDF');
+      const isPdfExtension = filename.toLowerCase().endsWith('.pdf');
+
+      if (isPdfHeader || isPdfExtension) {
+        try {
+          const parser = new PDFParse({ data: fileBuffer });
+          await (parser as any).load();
+          const result = await parser.getText();
+          await (parser as any).destroy?.();
+
+          if (result && result.pages && result.pages.length > 0) {
+            const extracted = result.pages
+              .map((p, idx) => ({
+                page_number: p.num || idx + 1,
+                text: (p.text || '').replace(/\r\n/g, '\n').trim(),
+              }))
+              .filter((p) => p.text.length > 0);
+
+            if (extracted.length > 0) {
+              pages = extracted;
+              console.log(
+                `[LocalExtractionService] Successfully extracted ${pages.length} pages from PDF using PDFParse`
+              );
             }
           }
+        } catch (pdfErr) {
+          console.warn(
+            '[LocalExtractionService] PDF binary extraction notice, checking text fallbacks:',
+            (pdfErr as Error).message
+          );
         }
-      } catch (err) {
-        console.warn('[LocalExtractionService] Falling back to standard verified discharge pages:', err);
       }
+
+      // Strategy 2: If PDF extraction yielded no pages or file is plain text / structured ASCII
+      if (pages.length === 0) {
+        try {
+          const rawString = fileBuffer.toString('utf-8');
+
+          // Check for form feed delimiter (\f is standard page break in generated PDFs/text)
+          if (rawString.includes('\f')) {
+            const ffParts = rawString.split('\f').map((p) => p.trim()).filter(Boolean);
+            if (ffParts.length > 1) {
+              pages = ffParts.map((text, idx) => ({
+                page_number: idx + 1,
+                text,
+              }));
+            }
+          }
+
+          // Check for "Page X of Y" or "PAGE X:" or "--- PAGE X ---"
+          if (pages.length === 0) {
+            const pageMarkerRegex = /(?:---+|\b)(?:PAGE|Page)\s+(\d+)(?:\s*(?:of|\/)\s*\d+)?(?:\s*[:\-])?(?:---+|\b)/i;
+            if (pageMarkerRegex.test(rawString)) {
+              const parts = rawString.split(/(?:---+|\b)(?:PAGE|Page)\s+(\d+)(?:\s*(?:of|\/)\s*\d+)?(?:\s*[:\-])?(?:---+|\b)/i);
+              if (parts.length >= 3) {
+                const parsedPages: TextractPage[] = [];
+                for (let i = 1; i < parts.length; i += 2) {
+                  const pNum = parseInt(parts[i], 10) || (Math.floor(i / 2) + 1);
+                  const pText = (parts[i + 1] || '').trim();
+                  if (pText) {
+                    parsedPages.push({ page_number: pNum, text: pText });
+                  }
+                }
+                if (parsedPages.length > 0) {
+                  pages = parsedPages;
+                }
+              }
+            }
+          }
+
+          // Check for Section headers to create logical pages if document is un-paged text
+          if (pages.length === 0 && rawString.trim().length > 0) {
+            const sectionMatches = rawString.split(/(?=SECTION\s+\d+|Section\s+\d+|CLINICAL DIAGNOSIS|DISCHARGE MEDICATIONS|DIETARY INSTRUCTIONS|EMERGENCY RED FLAGS)/i);
+            if (sectionMatches.length >= 3) {
+              pages = sectionMatches.map((sec, idx) => ({
+                page_number: idx + 1,
+                text: sec.trim(),
+              })).filter((p) => p.text.length > 0);
+            } else {
+              // Single page text document
+              pages = [{ page_number: 1, text: rawString.trim() }];
+            }
+          }
+        } catch (textErr) {
+          console.warn('[LocalExtractionService] Text parsing failed:', textErr);
+        }
+      }
+    }
+
+    // Default to demo surgical pages ONLY if no file buffer was provided
+    if (pages.length === 0) {
+      console.log('[LocalExtractionService] No custom file text found, utilizing standard demo fixture');
+      pages = DEMO_SURGICAL_PAGES;
     }
 
     const structuredPages = pages.map((p) => {

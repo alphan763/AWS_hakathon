@@ -33,10 +33,18 @@ export interface TextractNormalizedOutput {
 export interface BedrockPatient {
   name: string | null;
   age?: number | null;
+  diagnosis?: string | null;
   procedure?: string | null;
   discharge_date?: string | null;
   attending_physician?: string | null;
   hospital_name?: string | null;
+  caregiver?: string | null;
+  emergency_contact?: {
+    name?: string;
+    relationship?: string;
+    phone?: string;
+  } | null;
+  hospital_helpline?: string | null;
 }
 
 export interface BedrockMedication {
