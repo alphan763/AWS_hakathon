@@ -1,0 +1,26 @@
+services:
+  localstack:
+    container_name: carepath-localstack
+    image: localstack/localstack:3.8
+    ports:
+      - "4566:4566"            # LocalStack Edge Port (Gateway for S3, DynamoDB, SNS)
+      - "4510-4559:4510-4559"  # External services port range
+    environment:
+      - SERVICES=s3,dynamodb,sns
+      - DEFAULT_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DEBUG=0
+    volumes:
+      - "./scripts/init-localstack.sh:/etc/localstack/init/ready.d/init-aws.sh:ro"
+      - "localstack_data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  localstack_data:
+    driver: local

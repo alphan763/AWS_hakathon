@@ -1,0 +1,6 @@
+{
+  "name": "CarePath",
+  "description": "Mobile-first healthcare recovery application converting hospital discharge instructions into an evidence-linked recovery plan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
