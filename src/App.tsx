@@ -41,6 +41,10 @@ export default function App() {
   const [activities, setActivities] = useState<ActivityTask[]>(mockTodayActivities);
   const [warningSigns, setWarningSigns] = useState<WarningSign[]>(mockWarningSigns);
   const [followUp, setFollowUp] = useState(mockFollowUp);
+  const [plans, setPlans] = useState(mock14DayPlan);
+  const [documentPages, setDocumentPages] = useState<any[] | undefined>(undefined);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | undefined>(undefined);
+  const [documentTitle, setDocumentTitle] = useState<string | undefined>(undefined);
   const [checkInHistory, setCheckInHistory] = useState<CheckInRecord[]>([
     {
       id: 'checkin-day1',
@@ -61,10 +65,15 @@ export default function App() {
         if (plan && plan.patient) {
           setPatient((prev) => ({
             ...prev,
+            ...plan.patient,
             name: plan.patient.name || prev.name,
             procedure: plan.patient.procedure || prev.procedure,
             attendingPhysician: plan.patient.attendingPhysician || prev.attendingPhysician,
+            hospitalName: plan.patient.hospitalName || prev.hospitalName,
           }));
+        }
+        if (plan?.documentId) {
+          setActiveDocumentId(plan.documentId);
         }
         if (plan?.medications?.length) {
           setMedications(plan.medications);
@@ -77,6 +86,15 @@ export default function App() {
         }
         if (plan?.followUp) {
           setFollowUp(plan.followUp);
+        }
+        if (plan?.pages?.length) {
+          setDocumentPages(plan.pages);
+        }
+        if (plan?.plans?.length) {
+          setPlans(plan.plans);
+        }
+        if (plan?.medications?.[0]?.evidence?.documentName) {
+          setDocumentTitle(plan.medications[0].evidence.documentName);
         }
       })
       .catch((err) => {
@@ -178,7 +196,7 @@ export default function App() {
           followUp={followUp}
           checkInHistory={checkInHistory}
           selectedPlanDay={selectedPlanDay}
-          plans={mock14DayPlan}
+          plans={plans}
           onSelectPlanDay={setSelectedPlanDay}
           onToggleMedication={handleToggleMedication}
           onToggleActivity={handleToggleActivity}
@@ -229,7 +247,7 @@ export default function App() {
 
             {currentTab === 'plan' && (
               <PlanTab
-                plans={mock14DayPlan}
+                plans={plans}
                 selectedDay={selectedPlanDay}
                 onSelectDay={setSelectedPlanDay}
                 onShowEvidence={handleShowEvidence}
@@ -243,6 +261,7 @@ export default function App() {
                 warningSigns={warningSigns}
                 checkInHistory={checkInHistory}
                 onViewDocumentPage={handleOpenDocumentViewer}
+                documentId={activeDocumentId}
               />
             )}
 
@@ -289,6 +308,10 @@ export default function App() {
       {docViewerState.isOpen && (
         <DocumentViewerModal
           initialPage={docViewerState.page}
+          pages={documentPages}
+          documentTitle={documentTitle}
+          hospitalName={patient.hospitalName}
+          isDemo={patient.isDemo}
           onClose={() => setDocViewerState((prev) => ({ ...prev, isOpen: false }))}
         />
       )}

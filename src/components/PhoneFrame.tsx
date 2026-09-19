@@ -50,15 +50,15 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
   }, []);
 
   const sizeClasses = {
-    standard: 'max-w-[390px] h-[min(844px,calc(100vh-65px))] min-h-[580px]',
-    large: 'max-w-[440px] h-[min(910px,calc(100vh-55px))] min-h-[640px]',
-    max: 'max-w-[480px] h-[min(940px,calc(100vh-45px))] min-h-[680px]',
+    standard: 'w-[420px] max-w-full h-[min(880px,calc(100vh-80px))] min-h-[580px]',
+    large: 'w-[460px] max-w-full h-[min(930px,calc(100vh-70px))] min-h-[640px]',
+    max: 'w-[510px] max-w-full h-[min(960px,calc(100vh-60px))] min-h-[680px]',
   }[phoneSize];
 
   return (
     <div
       id="phone-frame-wrapper"
-      className="h-screen w-screen overflow-hidden bg-slate-950 flex flex-col justify-between items-center select-text"
+      className="fixed inset-0 w-screen h-screen overflow-hidden bg-slate-950 flex flex-col justify-between items-center select-text"
     >
       {/* Top Desktop Control Bar (Visible on md+ screens) */}
       <header className="w-full max-w-6xl shrink-0 px-4 pt-2.5 pb-2 hidden md:flex items-center justify-between bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-md text-white mt-2 mb-1 mx-auto z-40">
@@ -200,7 +200,7 @@ export const PhoneFrame: React.FC<PhoneFrameProps> = ({
         {/* Fixed Mobile Device Frame (Exact realistic smartphone dimensions) */}
         <div
           id="mobile-phone-device"
-          className={`w-full ${sizeClasses} bg-[#F4F6F8] text-[#1E293B] rounded-[42px] md:rounded-[46px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] border-[8px] md:border-[9px] border-slate-800 ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative transition-all duration-200`}
+          className={`shrink-0 ${sizeClasses} bg-[#F4F6F8] text-[#1E293B] rounded-[42px] md:rounded-[46px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] border-[8px] md:border-[9px] border-slate-800 ring-1 ring-slate-700/60 flex flex-col overflow-hidden relative transition-all duration-200`}
         >
           {/* Simulated Mobile Device Top Header (Camera notch / pill + Status bar) - FIXED SHRINK-0 */}
           <div

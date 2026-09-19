@@ -6,23 +6,34 @@ import { FileText, X, ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck, Prin
 interface DocumentViewerModalProps {
   initialPage?: number;
   onClose: () => void;
+  pages?: DocumentPage[];
+  documentTitle?: string;
+  hospitalName?: string;
+  isDemo?: boolean;
 }
 
 export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   initialPage = 1,
   onClose,
+  pages,
+  documentTitle,
+  hospitalName,
+  isDemo = true,
 }) => {
+  const displayPages = pages && pages.length > 0 ? pages : mockDischargeDocumentPages;
+  const pageNumbers = displayPages.map((p) => p.pageNumber);
   const [activePage, setActivePage] = useState<number>(initialPage);
 
   useEffect(() => {
-    if (initialPage >= 1 && initialPage <= 5) {
+    if (pageNumbers.includes(initialPage)) {
       setActivePage(initialPage);
+    } else if (pageNumbers.length > 0) {
+      setActivePage(pageNumbers[0]);
     }
-  }, [initialPage]);
+  }, [initialPage, pages]);
 
   const currentPageData =
-    mockDischargeDocumentPages.find((p) => p.pageNumber === activePage) ||
-    mockDischargeDocumentPages[0];
+    displayPages.find((p) => p.pageNumber === activePage) || displayPages[0];
 
   return (
     <div
@@ -46,7 +57,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 Hospital Document Record
               </div>
               <h3 className="text-sm font-bold text-slate-900 leading-tight">
-                Discharge Instructions (#AMH-9921408)
+                {documentTitle || 'Discharge Instructions'}
               </h3>
             </div>
           </div>
@@ -73,7 +84,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         {/* Page Selector Tabs */}
         <div className="px-4 py-2 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between gap-1 overflow-x-auto shrink-0 no-scrollbar">
           <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((pageNum) => (
+            {pageNumbers.map((pageNum) => (
               <button
                 key={pageNum}
                 id={`doc-page-tab-${pageNum}`}
@@ -85,26 +96,23 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 }`}
               >
                 Page {pageNum}
-                {pageNum === 3 && ' (Meds)'}
-                {pageNum === 4 && ' (Activity)'}
-                {pageNum === 5 && ' (Warnings)'}
               </button>
             ))}
           </div>
 
           <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500 font-medium">
-            <span>Page {activePage} of 5</span>
+            <span>Page {activePage} of {pageNumbers.length}</span>
           </div>
         </div>
 
-        {/* Fictional Demo Disclaimer Banner */}
+        {/* Ingestion Source Banner */}
         <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-200/80 flex items-center justify-between text-[11px] text-amber-900 shrink-0">
           <div className="flex items-center gap-1.5 font-bold">
             <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Demo patient · Fictional data</span>
+            <span>{isDemo ? 'Demo patient · Verified discharge record' : 'Uploaded document record'}</span>
           </div>
           <span className="text-[10px] text-amber-700 font-mono">
-            Grounding Source for Amazon Textract & Bedrock
+            {hospitalName || 'Grounding Source for Local Clinical Ingestion'}
           </span>
         </div>
 
@@ -119,7 +127,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 {currentPageData.title}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
-                Apex Memorial Healthcare • Verified Ingestion Artifact
+                {hospitalName ? `${hospitalName} • Verified Ingestion Artifact` : 'Verified Ingestion Artifact'}
               </div>
             </div>
 

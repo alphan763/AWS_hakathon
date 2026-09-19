@@ -23,6 +23,7 @@ interface CheckInTabProps {
   warningSigns: WarningSign[];
   checkInHistory: CheckInRecord[];
   onViewDocumentPage: (pageNumber: number) => void;
+  documentId?: string;
 }
 
 export const CheckInTab: React.FC<CheckInTabProps> = ({
@@ -30,6 +31,7 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
   warningSigns,
   checkInHistory,
   onViewDocumentPage,
+  documentId,
 }) => {
   const [pain, setPain] = useState<PainLevel>('same');
   const [fever, setFever] = useState<FeverStatus>('no');
@@ -60,6 +62,7 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
         fever,
         breathing,
         notes: notes.trim() || undefined,
+        documentId,
       });
 
       const rec = res.record;
