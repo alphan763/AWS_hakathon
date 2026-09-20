@@ -28,7 +28,7 @@ interface HomeTabProps {
   patient: PatientProfile;
   medications: MedicationTask[];
   activities: ActivityTask[];
-  followUp: FollowUpAppointment;
+  followUp: FollowUpAppointment | null;
   warningSigns: WarningSign[];
   onToggleMedication: (id: string) => void;
   onToggleActivity: (id: string) => void;
@@ -475,32 +475,42 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               Upcoming Surgical Follow-Up
             </span>
           </div>
-          <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
-            {followUp.date.split('(')[0]}
-          </span>
+          {followUp && (
+            <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
+              {followUp.date.split('(')[0]}
+            </span>
+          )}
         </div>
 
-        <h4 className="text-sm font-bold text-slate-900">
-          {followUp.title}
-        </h4>
-        <p className="text-xs text-slate-600 mt-1">
-          {followUp.doctor} • {followUp.location}
-        </p>
+        {followUp ? (
+          <>
+            <h4 className="text-sm font-bold text-slate-900">
+              {followUp.title}
+            </h4>
+            <p className="text-xs text-slate-600 mt-1">
+              {followUp.doctor} • {followUp.location}
+            </p>
 
-        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-          <button
-            onClick={() => onShowEvidence(followUp.evidence, followUp.title)}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 cursor-pointer"
-          >
-            <span>Why this appointment? →</span>
-          </button>
-          <button
-            onClick={() => onViewDocumentPage(followUp.evidence.sourcePage)}
-            className="text-xs text-slate-500 hover:text-slate-700 font-medium"
-          >
-            View page {followUp.evidence.sourcePage}
-          </button>
-        </div>
+            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+              <button
+                onClick={() => onShowEvidence(followUp.evidence, followUp.title)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 cursor-pointer"
+              >
+                <span>Why this appointment? →</span>
+              </button>
+              <button
+                onClick={() => onViewDocumentPage(followUp.evidence.sourcePage)}
+                className="text-xs text-slate-500 hover:text-slate-700 font-medium"
+              >
+                View page {followUp.evidence.sourcePage}
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-slate-500">
+            No follow-up appointment was found in your discharge paperwork.
+          </p>
+        )}
       </div>
 
       {/* WATCH FOR: Documented Warning Signs Glance */}

@@ -61,6 +61,10 @@ export interface CheckInSubmissionPayload {
   documentId?: string;
 }
 
+/** Shown when a reported symptom has no documented warning sign in the active plan. */
+export const UNMATCHED_SYMPTOM_NOTICE =
+  "Check-in recorded. Your discharge paperwork doesn't list a warning sign for the symptom you reported, so no caregiver alert was sent. If you're concerned, contact your care team.";
+
 export interface CheckInResponse {
   success: boolean;
   record: CheckInRecord & {

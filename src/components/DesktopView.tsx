@@ -39,14 +39,14 @@ import {
   Smartphone,
   Check,
 } from 'lucide-react';
-import { CarePathApi } from '../services/api';
+import { CarePathApi, UNMATCHED_SYMPTOM_NOTICE } from '../services/api';
 
 interface DesktopViewProps {
   patient: PatientProfile;
   medications: MedicationTask[];
   activities: ActivityTask[];
   warningSigns: WarningSign[];
-  followUp: FollowUpAppointment;
+  followUp: FollowUpAppointment | null;
   checkInHistory: CheckInRecord[];
   selectedPlanDay: number;
   plans: DailyPlan[];
@@ -91,6 +91,7 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null);
+  const [symptomNotice, setSymptomNotice] = useState<string | null>(null);
 
   // Active filter for today's tasks
   const [taskFilter, setTaskFilter] = useState<'all' | 'medication' | 'activity'>('all');
@@ -104,7 +105,9 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
   const handleCheckInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSymptomNotice(null);
 
+    // Offline fallback only: when the server responds, its evaluation is authoritative
     let matchedWarning: WarningSign | null = null;
     if (breathing === 'difficult') {
       matchedWarning = warningSigns.find((w) => w.triggerKey === 'breathing') || null;
@@ -124,14 +127,17 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
       });
 
       const rec = res.record;
-      onCheckInSubmitted(rec, matchedWarning);
+      onCheckInSubmitted(rec, rec.matchedWarningSign ?? null);
 
       if (rec.warningMatched) {
         setCheckInSuccess('Safety warning triggered — Caregiver notified via SNS.');
+        setTimeout(() => setCheckInSuccess(null), 5000);
+      } else if (rec.unmatchedSymptoms?.length) {
+        setSymptomNotice(UNMATCHED_SYMPTOM_NOTICE);
       } else {
         setCheckInSuccess('Daily check-in recorded successfully!');
+        setTimeout(() => setCheckInSuccess(null), 5000);
       }
-      setTimeout(() => setCheckInSuccess(null), 5000);
     } catch (err) {
       const record: CheckInRecord = {
         id: `checkin-${Date.now()}`,
@@ -256,9 +262,11 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-extrabold text-white tracking-tight">{patient.name}</h1>
-                <span className="text-xs font-mono bg-slate-700 text-slate-300 px-2 py-0.5 rounded-md">
-                  MRN: #AMH-9921408
-                </span>
+                {patient.mrn && (
+                  <span className="text-xs font-mono bg-slate-700 text-slate-300 px-2 py-0.5 rounded-md">
+                    MRN: {patient.mrn}
+                  </span>
+                )}
                 <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
                   Verified Plan
@@ -557,27 +565,37 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                 <span className="text-[11px] uppercase font-mono tracking-wider text-teal-400 font-bold">
                   Scheduled Outpatient Clinical Follow-Up
                 </span>
-                <h3 className="text-sm font-extrabold text-white tracking-tight mt-0.5">
-                  {followUp.title}
-                </h3>
-                <div className="flex items-center gap-3 text-xs text-slate-300 mt-1">
-                  <span><strong>Date:</strong> {followUp.date} at {followUp.time}</span>
-                  <span>•</span>
-                  <span><strong>Physician:</strong> {followUp.doctor}</span>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                  <MapPin className="w-3 h-3 text-slate-400" />
-                  <span>{followUp.location}</span>
-                </div>
+                {followUp ? (
+                  <>
+                    <h3 className="text-sm font-extrabold text-white tracking-tight mt-0.5">
+                      {followUp.title}
+                    </h3>
+                    <div className="flex items-center gap-3 text-xs text-slate-300 mt-1">
+                      <span><strong>Date:</strong> {followUp.date} at {followUp.time}</span>
+                      <span>•</span>
+                      <span><strong>Physician:</strong> {followUp.doctor}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
+                      <MapPin className="w-3 h-3 text-slate-400" />
+                      <span>{followUp.location}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1">
+                    No follow-up appointment was found in the discharge paperwork.
+                  </p>
+                )}
               </div>
             </div>
 
-            <button
-              onClick={() => onOpenDocumentViewer(followUp.evidence.sourcePage)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all shrink-0 cursor-pointer"
-            >
-              View Follow-Up Document (Pg {followUp.evidence.sourcePage})
-            </button>
+            {followUp && (
+              <button
+                onClick={() => onOpenDocumentViewer(followUp.evidence.sourcePage)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all shrink-0 cursor-pointer"
+              >
+                View Follow-Up Document (Pg {followUp.evidence.sourcePage})
+              </button>
+            )}
           </div>
         </div>
 
@@ -689,6 +707,13 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                 <div className="p-2.5 rounded-xl bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs font-semibold flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
                   <span>{checkInSuccess}</span>
+                </div>
+              )}
+
+              {symptomNotice && (
+                <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs font-semibold flex items-start gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>{symptomNotice}</span>
                 </div>
               )}
 

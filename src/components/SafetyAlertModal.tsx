@@ -13,9 +13,14 @@ export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
   warningSign,
   onClose,
   onViewDocumentPage,
-  hospitalHelpline = '+1 (800) 555-0144',
+  hospitalHelpline,
 }) => {
   if (!warningSign) return null;
+
+  // Only call numbers printed in this patient's paperwork
+  const callNumber =
+    hospitalHelpline || warningSign.documentedAction.match(/(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/)?.[0];
+  const callDigits = callNumber?.replace(/[^0-9+]/g, '');
 
   return (
     <div
@@ -73,14 +78,20 @@ export const SafetyAlertModal: React.FC<SafetyAlertModalProps> = ({
 
           {/* Action Buttons */}
           <div className="space-y-2.5">
-            <a
-              id="call-hospital-helpline-btn"
-              href={`tel:${hospitalHelpline.replace(/[^0-9+]/g, '')}`}
-              className="w-full flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all"
-            >
-              <Phone className="w-4 h-4" />
-              <span>Call Hospital Line ({hospitalHelpline})</span>
-            </a>
+            {callDigits ? (
+              <a
+                id="call-hospital-helpline-btn"
+                href={`tel:${callDigits}`}
+                className="w-full flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all"
+              >
+                <Phone className="w-4 h-4" />
+                <span>Call Hospital Line ({callNumber})</span>
+              </a>
+            ) : (
+              <div className="w-full py-3 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold">
+                No hospital phone number was found in your discharge paperwork.
+              </div>
+            )}
 
             {onViewDocumentPage && (
               <button

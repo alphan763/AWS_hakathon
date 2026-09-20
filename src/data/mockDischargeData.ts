@@ -11,6 +11,7 @@ import {
 export const mockPatient: PatientProfile = {
   id: 'pt-84920',
   name: 'Mrs. Anita Sharma',
+  mrn: '#AMH-9921408',
   age: 58,
   diagnosis: 'Symptomatic Cholelithiasis (Gallstones)',
   procedure: 'Elective Laparoscopic Cholecystectomy',

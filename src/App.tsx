@@ -6,6 +6,8 @@ import {
   CheckInRecord,
   MedicationTask,
   ActivityTask,
+  FollowUpAppointment,
+  PatientProfile,
 } from './types';
 import {
   mockPatient,
@@ -36,11 +38,11 @@ export default function App() {
   const [selectedPlanDay, setSelectedPlanDay] = useState<number>(2);
 
   // Application Data State
-  const [patient, setPatient] = useState(mockPatient);
+  const [patient, setPatient] = useState<PatientProfile>(mockPatient);
   const [medications, setMedications] = useState<MedicationTask[]>(mockTodayMedications);
   const [activities, setActivities] = useState<ActivityTask[]>(mockTodayActivities);
   const [warningSigns, setWarningSigns] = useState<WarningSign[]>(mockWarningSigns);
-  const [followUp, setFollowUp] = useState(mockFollowUp);
+  const [followUp, setFollowUp] = useState<FollowUpAppointment | null>(mockFollowUp);
   const [plans, setPlans] = useState(mock14DayPlan);
   const [documentPages, setDocumentPages] = useState<any[] | undefined>(undefined);
   const [activeDocumentId, setActiveDocumentId] = useState<string | undefined>(undefined);
@@ -62,35 +64,16 @@ export default function App() {
   const refreshActivePlan = () => {
     CarePathApi.getActiveRecoveryPlan()
       .then((plan) => {
-        if (plan && plan.patient) {
-          setPatient((prev) => ({
-            ...prev,
-            ...plan.patient,
-            name: plan.patient.name || prev.name,
-            procedure: plan.patient.procedure || prev.procedure,
-            attendingPhysician: plan.patient.attendingPhysician || prev.attendingPhysician,
-            hospitalName: plan.patient.hospitalName || prev.hospitalName,
-          }));
-        }
-        if (plan?.documentId) {
-          setActiveDocumentId(plan.documentId);
-        }
-        if (plan?.medications?.length) {
-          setMedications(plan.medications);
-        }
-        if (plan?.activities?.length) {
-          setActivities(plan.activities);
-        }
-        if (plan?.warningSigns?.length) {
-          setWarningSigns(plan.warningSigns);
-        }
-        if (plan?.followUp) {
-          setFollowUp(plan.followUp);
-        }
-        if (plan?.pages?.length) {
-          setDocumentPages(plan.pages);
-        }
-        if (plan?.plans?.length) {
+        if (!plan?.patient) return;
+        // Replace every field (empty lists included) so a new plan never shows the previous patient's items
+        setPatient(plan.patient);
+        setActiveDocumentId(plan.documentId);
+        setMedications(plan.medications ?? []);
+        setActivities(plan.activities ?? []);
+        setWarningSigns(plan.warningSigns ?? []);
+        setFollowUp(plan.followUp ?? null);
+        setDocumentPages(plan.pages?.length ? plan.pages : undefined);
+        if (plan.plans?.length) {
           setPlans(plan.plans);
         }
         if (plan?.medications?.[0]?.evidence?.documentName) {
@@ -165,8 +148,10 @@ export default function App() {
 
   // Trigger Breathing Alert (Hackathon Judging Shortcut)
   const handleTriggerBreathingAlert = () => {
-    const breathingWarning = mockWarningSigns.find((w) => w.triggerKey === 'breathing') || mockWarningSigns[0];
-    setActiveSafetyWarning(breathingWarning);
+    const breathingWarning = warningSigns.find((w) => w.triggerKey === 'breathing') ?? warningSigns[0];
+    if (breathingWarning) {
+      setActiveSafetyWarning(breathingWarning);
+    }
   };
 
   // Reset Demo State
@@ -174,6 +159,10 @@ export default function App() {
     setPatient(mockPatient);
     setMedications(mockTodayMedications);
     setActivities(mockTodayActivities);
+    setWarningSigns(mockWarningSigns);
+    setFollowUp(mockFollowUp);
+    setPlans(mock14DayPlan);
+    setDocumentPages(undefined);
     setCurrentTab('home');
     setSelectedPlanDay(2);
     setActiveSafetyWarning(null);

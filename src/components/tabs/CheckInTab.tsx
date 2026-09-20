@@ -16,7 +16,7 @@ import {
   ChevronDown,
   Bell,
 } from 'lucide-react';
-import { CarePathApi } from '../../services/api';
+import { CarePathApi, UNMATCHED_SYMPTOM_NOTICE } from '../../services/api';
 
 interface CheckInTabProps {
   onCheckInSubmitted: (record: CheckInRecord, matchedWarning: WarningSign | null) => void;
@@ -40,12 +40,14 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedFeedback, setSubmittedFeedback] = useState<string | null>(null);
   const [snsFeedback, setSnsFeedback] = useState<string | null>(null);
+  const [symptomNotice, setSymptomNotice] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSymptomNotice(null);
 
-    // Deterministic safety check: Compare against extracted warning signs from Page 5
+    // Offline fallback only: when the server responds, its evaluation of the active plan is authoritative
     let matchedWarning: WarningSign | null = null;
     if (breathing === 'difficult') {
       matchedWarning = warningSigns.find((w) => w.triggerKey === 'breathing') || null;
@@ -66,12 +68,14 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
       });
 
       const rec = res.record;
-      onCheckInSubmitted(rec, matchedWarning);
+      onCheckInSubmitted(rec, rec.matchedWarningSign ?? null);
 
       if (rec.warningMatched && rec.snsNotification) {
         setSnsFeedback(
-          `Amazon SNS Alert published to caregiver (+1 800 555-0199) • MsgID: ${rec.snsNotification.messageId || 'sns-dispatch-ok'}`
+          `Amazon SNS alert published to caregiver • MsgID: ${rec.snsNotification.messageId || 'sns-dispatch-ok'}`
         );
+      } else if (rec.unmatchedSymptoms?.length) {
+        setSymptomNotice(UNMATCHED_SYMPTOM_NOTICE);
       } else {
         setSubmittedFeedback('Check-in recorded — Recovery progressing normally.');
         setTimeout(() => setSubmittedFeedback(null), 4000);
@@ -146,6 +150,13 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
             <div className="font-bold">Safety Warning Triggered & Dispatched</div>
             <div className="text-[11px] text-rose-800 mt-0.5">{snsFeedback}</div>
           </div>
+        </div>
+      )}
+
+      {symptomNotice && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-950 px-4 py-3 rounded-2xl flex items-start gap-2.5 text-xs font-semibold animate-fade-in">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <span>{symptomNotice}</span>
         </div>
       )}
 

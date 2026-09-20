@@ -2,12 +2,20 @@ export type TabType = 'home' | 'plan' | 'checkin' | 'more';
 
 export type TaskCategory = 'medication' | 'activity' | 'diet' | 'rest' | 'followup';
 
+export type SymptomKey = 'breathing' | 'fever' | 'pain_worse';
+
+export type CitationStatus = 'VERIFIED' | 'UNVERIFIED';
+
 export interface EvidenceSource {
   documentId: string;
   documentName: string;
   sourcePage: number;
   section: string;
   originalText: string;
+  // Set by server-side verification; absent (e.g. offline mock data) means not verified
+  citationStatus?: CitationStatus;
+  confidence?: number;
+  verificationNote?: string;
 }
 
 export interface MedicationTask {
@@ -43,14 +51,14 @@ export interface FollowUpAppointment {
   location: string;
   contactNumber: string;
   notes: string;
-  dayNumber: number;
+  dayNumber: number | null;
   evidence: EvidenceSource;
 }
 
 export interface WarningSign {
   id: string;
   condition: string;
-  triggerKey: 'breathing' | 'fever' | 'pain_worse';
+  triggerKey?: SymptomKey;
   severity: 'urgent' | 'high';
   documentedAction: string;
   sourcePage: number;
@@ -71,7 +79,8 @@ export interface DailyPlan {
 export interface PatientProfile {
   id: string;
   name: string;
-  age: number;
+  mrn?: string;
+  age: number | null;
   diagnosis: string;
   procedure: string;
   dischargeDate: string;
@@ -103,6 +112,8 @@ export interface CheckInRecord {
   notes?: string;
   warningMatched: boolean;
   matchedWarningSign?: WarningSign;
+  // Reported symptoms with no documented warning sign in the active plan
+  unmatchedSymptoms?: SymptomKey[];
 }
 
 export interface DocumentPage {

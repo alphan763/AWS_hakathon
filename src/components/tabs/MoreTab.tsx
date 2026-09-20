@@ -28,6 +28,10 @@ export const MoreTab: React.FC<MoreTabProps> = ({
   onOpenUpload,
   onResetDemo,
 }) => {
+  // Call buttons only appear for numbers printed in the patient's paperwork
+  const helplineDigits = patient.hospitalHelpline?.replace(/[^0-9+]/g, '');
+  const emergencyDigits = patient.emergencyContact.phone?.replace(/[^0-9+]/g, '');
+
   return (
     <div id="more-tab-view" className="space-y-4 pb-20 pt-1 px-4 sm:px-5 animate-fade-in">
       {/* Header */}
@@ -57,15 +61,20 @@ export const MoreTab: React.FC<MoreTabProps> = ({
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Recovery Summary
           </span>
-          <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100">
-            MRN: #AMH-9921408
-          </span>
+          {patient.mrn && (
+            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100">
+              MRN: {patient.mrn}
+            </span>
+          )}
         </div>
 
         <div className="space-y-2 text-xs">
           <div className="flex justify-between py-1.5 border-b border-slate-100">
             <span className="text-slate-500">Patient</span>
-            <span className="font-bold text-slate-900">{patient.name} ({patient.age} yrs)</span>
+            <span className="font-bold text-slate-900">
+              {patient.name}
+              {patient.age ? ` (${patient.age} yrs)` : ''}
+            </span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-slate-100">
             <span className="text-slate-500">Procedure</span>
@@ -118,28 +127,36 @@ export const MoreTab: React.FC<MoreTabProps> = ({
         <div className="space-y-2.5 text-xs">
           <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
             <div>
-              <div className="font-bold text-slate-900">24/7 Surgical Duty Desk</div>
-              <div className="text-slate-500">{patient.hospitalHelpline}</div>
+              <div className="font-bold text-slate-900">Hospital Helpline</div>
+              <div className="text-slate-500">{patient.hospitalHelpline || 'Not documented'}</div>
             </div>
-            <a
-              href={`tel:${patient.hospitalHelpline.replace(/[^0-9+]/g, '')}`}
-              className="px-3 py-1.5 rounded-xl bg-teal-700 text-white font-bold text-[11px]"
-            >
-              Call
-            </a>
+            {helplineDigits && (
+              <a
+                href={`tel:${helplineDigits}`}
+                className="px-3 py-1.5 rounded-xl bg-teal-700 text-white font-bold text-[11px]"
+              >
+                Call
+              </a>
+            )}
           </div>
 
           <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
             <div>
-              <div className="font-bold text-slate-900">Emergency Contact (Husband)</div>
-              <div className="text-slate-500">{patient.emergencyContact.name} ({patient.emergencyContact.phone})</div>
+              <div className="font-bold text-slate-900">
+                Emergency Contact{patient.emergencyContact.relationship ? ` (${patient.emergencyContact.relationship})` : ''}
+              </div>
+              <div className="text-slate-500">
+                {patient.emergencyContact.name} ({patient.emergencyContact.phone || 'phone not documented'})
+              </div>
             </div>
-            <a
-              href={`tel:${patient.emergencyContact.phone.replace(/[^0-9+]/g, '')}`}
-              className="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-800 font-bold text-[11px]"
-            >
-              Call
-            </a>
+            {emergencyDigits && (
+              <a
+                href={`tel:${emergencyDigits}`}
+                className="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-800 font-bold text-[11px]"
+              >
+                Call
+              </a>
+            )}
           </div>
         </div>
       </div>
