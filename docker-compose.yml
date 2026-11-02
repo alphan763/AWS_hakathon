@@ -2,7 +2,7 @@ services:
   localstack:
     container_name: carepath-localstack
     image: localstack/localstack:3.8
-    ports:
+    ports: 
       - "4566:4566"            # LocalStack Edge Port (Gateway for S3, DynamoDB, SNS)
       - "4510-4559:4510-4559"  # External services port range
     environment:
