@@ -2,7 +2,7 @@
 
 **Event:** AWS Student Hackathon
 **Report date:** 19 September 2026
-**Repository:** `aws_hackton/CarePath` (15 commits, all on 19 Sep 2026)
+**Repository:** `aws_hackton/CarePath` (15 commits, all on 19 Sep 2026) 
 **Codebase size:** ~8,450 lines of TypeScript/TSX (≈3,450 backend, ≈5,000 frontend)
 
 ---
